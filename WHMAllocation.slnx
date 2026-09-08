@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="WHMAllocation.App/WHMAllocation.App.csproj" />
+  <Project Path="WHMAllocation.Core/WHMAllocation.Core.csproj" />
+  <Project Path="WHMAllocation.Infrastructure/WHMAllocation.Infrastructure.csproj" />
+  <Project Path="WHMAllocation.Tests/WHMAllocation.Tests.csproj" />
+</Solution>

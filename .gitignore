@@ -55,3 +55,17 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/
+
+# EF Local Tools
+.config/dotnet-tools.json
