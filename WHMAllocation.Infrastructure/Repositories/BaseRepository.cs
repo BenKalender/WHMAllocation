@@ -26,22 +26,21 @@ public class BaseRepository<T> : IBaseRepository<T>
     public virtual async Task AddAsync(T entity)
     {
         await _dbSet.AddAsync(entity);
-        await _dbContext.SaveChangesAsync();
     }
 
-    public virtual async Task UpdateAsync(T entity)
+    public virtual Task UpdateAsync(T entity)
     {
         entity.LastChangedAt = DateTime.UtcNow;
 
         _dbSet.Update(entity);
 
-        await _dbContext.SaveChangesAsync();
+        return Task.CompletedTask;
     }
 
-    public virtual async Task DeleteAsync(T entity)
+    public virtual Task DeleteAsync(T entity)
     {
         _dbSet.Remove(entity);
 
-        await _dbContext.SaveChangesAsync();
+        return Task.CompletedTask;
     }
 }

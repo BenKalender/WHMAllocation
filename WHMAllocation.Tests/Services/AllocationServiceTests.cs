@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using WHMAllocation.Core.Entities;
 using WHMAllocation.Core.Enums;
+using WHMAllocation.Core.Interfaces;
 using WHMAllocation.Core.Interfaces.Repositories;
 using WHMAllocation.Core.Services;
 
@@ -43,7 +44,7 @@ public class AllocationServiceTests
             ProductId = productId,
             Quantity = 50
         };
-
+        var unitOfWork = new Mock<IUnitOfWork>();
         var orderRepository = new Mock<IOrderRepository>();
         var skuRepository = new Mock<ISkuRepository>();
         var allocationRepository = new Mock<IAllocationRepository>();
@@ -52,7 +53,7 @@ public class AllocationServiceTests
 
         skuRepository.Setup(x => x.GetAvailableSkusByProductAsync(productId)).ReturnsAsync([sku]);
 
-        var service = new AllocationService(orderRepository.Object, skuRepository.Object, allocationRepository.Object);
+        var service = new AllocationService(unitOfWork.Object, orderRepository.Object, skuRepository.Object, allocationRepository.Object);
 
         await service.AllocateReleasedOrdersAsync();
 
@@ -146,6 +147,7 @@ public class AllocationServiceTests
             Quantity = 100
         };
 
+        var unitOfWork = new Mock<IUnitOfWork>();
         var orderRepository = new Mock<IOrderRepository>();
         var skuRepository = new Mock<ISkuRepository>();
         var allocationRepository = new Mock<IAllocationRepository>();
@@ -154,7 +156,7 @@ public class AllocationServiceTests
 
         skuRepository.Setup(x => x.GetAvailableSkusByProductAsync(productId)).ReturnsAsync([sku]);
 
-        var service = new AllocationService(orderRepository.Object, skuRepository.Object, allocationRepository.Object);
+        var service = new AllocationService(unitOfWork.Object, orderRepository.Object, skuRepository.Object, allocationRepository.Object);
 
         await service.AllocateReleasedOrdersAsync();
 
@@ -187,6 +189,7 @@ public class AllocationServiceTests
             Quantity = 50  
         };
 
+        var unitOfWork = new Mock<IUnitOfWork>();
         var orderRepository = new Mock<IOrderRepository>();
         var skuRepository = new Mock<ISkuRepository>();
         var allocationRepository = new Mock<IAllocationRepository>();
@@ -195,7 +198,7 @@ public class AllocationServiceTests
         orderRepository.Setup(x => x.GetReleasedOrdersAsync()).ReturnsAsync([order]);
         skuRepository.Setup(x => x.GetAvailableSkusByProductAsync(productId)).ReturnsAsync([sku]);
 
-        var service = new AllocationService(orderRepository.Object, skuRepository.Object, allocationRepository.Object);
+        var service = new AllocationService(unitOfWork.Object, orderRepository.Object, skuRepository.Object, allocationRepository.Object);
 
         // Act
         await service.AllocateReleasedOrdersAsync();
@@ -235,6 +238,7 @@ public class AllocationServiceTests
             Quantity = 15
         };
 
+        var unitOfWork = new Mock<IUnitOfWork>();
         var orderRepository = new Mock<IOrderRepository>();
         var skuRepository = new Mock<ISkuRepository>();
         var allocationRepository = new Mock<IAllocationRepository>();
@@ -243,7 +247,7 @@ public class AllocationServiceTests
 
         skuRepository.Setup(x => x.GetAvailableSkusByProductAsync(productId)).ReturnsAsync([sku1, sku2]);
 
-        var service = new AllocationService(orderRepository.Object, skuRepository.Object, allocationRepository.Object);
+        var service = new AllocationService(unitOfWork.Object, orderRepository.Object, skuRepository.Object, allocationRepository.Object);
 
         await service.AllocateReleasedOrdersAsync();
 

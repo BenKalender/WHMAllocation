@@ -1,5 +1,6 @@
 using WHMAllocation.Core.Entities;
 using WHMAllocation.Core.Enums;
+using WHMAllocation.Core.Interfaces;
 using WHMAllocation.Core.Interfaces.Repositories;
 using WHMAllocation.Core.Interfaces.Services;
 
@@ -7,11 +8,13 @@ namespace WHMAllocation.Core.Services;
 
 public class InventoryCorrectionService : IInventoryCorrectionService
 {
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ISkuRepository _skuRepository;
     private readonly IAllocationRepository _allocationRepository;
 
-    public InventoryCorrectionService(ISkuRepository skuRepository, IAllocationRepository allocationRepository)
+    public InventoryCorrectionService(IUnitOfWork unitOfWork, ISkuRepository skuRepository, IAllocationRepository allocationRepository)
     {
+        _unitOfWork = unitOfWork;
         _skuRepository = skuRepository;
         _allocationRepository = allocationRepository;
     }
@@ -43,6 +46,8 @@ public class InventoryCorrectionService : IInventoryCorrectionService
 
             await TryFindSubstituteSkuAsync(sku, allocation, missingQuantity);
         }
+
+        await _unitOfWork.SaveChangesAsync();
     }
 
     private async Task TryFindSubstituteSkuAsync(Sku originalSku, Allocation allocation, int missingQuantity)

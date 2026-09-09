@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using WHMAllocation.Core.Entities;
+using WHMAllocation.Core.Interfaces;
 using WHMAllocation.Core.Interfaces.Repositories;
 using WHMAllocation.Core.Services;
 
@@ -29,6 +30,7 @@ public class OrderCancellationServiceTests
             Quantity = 20,
             IsActive = true
         };
+        var unitOfWork = new Mock<IUnitOfWork>();
 
         var orderRepository = new Mock<IOrderRepository>();
 
@@ -43,6 +45,7 @@ public class OrderCancellationServiceTests
             .ReturnsAsync(sku);
 
         var service = new OrderCancellationService(
+                unitOfWork.Object,
                 orderRepository.Object,
                 allocationRepository.Object,
                 skuRepository.Object);
