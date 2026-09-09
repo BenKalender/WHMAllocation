@@ -14,8 +14,7 @@ public class SkuRepository
     {
     }
 
-    public async Task<List<Sku>>
-        GetAvailableSkusByProductAsync(Guid productId)
+    public async Task<List<Sku>> GetAvailableSkusByProductAsync(Guid productId)
     {
         return await _dbContext.Skus
             .Include(x => x.WarehouseLocation)
