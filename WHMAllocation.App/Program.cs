@@ -32,8 +32,8 @@ using WHMAllocation.App.Components;
 using WHMAllocation.Infrastructure.Persistence;
 using WHMAllocation.Infrastructure.Repositories;
 using WHMAllocation.Core.Interfaces.Repositories;
-// using WHMAllocation.Core.Interfaces.Services;
-// using WHMAllocation.Core.Services;
+using WHMAllocation.Core.Interfaces.Services;
+using WHMAllocation.Core.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,9 +49,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<ISkuRepository, SkuRepository>();
 builder.Services.AddScoped<IAllocationRepository, AllocationRepository>();
-//builder.Services.AddScoped<IAllocationService, AllocationService>();
-// builder.Services.AddScoped<IOrderCancellationService, OrderCancellationService>();
-// builder.Services.AddScoped<IInventoryCorrectionService, InventoryCorrectionService>();
+builder.Services.AddScoped<IAllocationService, AllocationService>();
+builder.Services.AddScoped<IOrderCancellationService, OrderCancellationService>();
+builder.Services.AddScoped<IInventoryCorrectionService, InventoryCorrectionService>();
 
 var app = builder.Build();
 
