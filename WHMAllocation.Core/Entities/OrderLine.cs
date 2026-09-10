@@ -8,6 +8,8 @@ public class OrderLine : BaseEntity
 
     public int RequestedQuantity { get; set; }
 
+    public bool IsCancelled { get; set; }
+
     public Order Order { get; set; } = null!;
 
     public Product Product { get; set; } = null!;

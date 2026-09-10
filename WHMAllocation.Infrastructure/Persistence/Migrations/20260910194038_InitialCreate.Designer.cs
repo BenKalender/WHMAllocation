@@ -11,7 +11,7 @@ using WHMAllocation.Infrastructure.Persistence;
 namespace WHMAllocation.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260908143619_InitialCreate")]
+    [Migration("20260910194038_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -95,6 +95,9 @@ namespace WHMAllocation.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("LastChangedAt")
                         .HasColumnType("TEXT");

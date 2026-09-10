@@ -93,6 +93,9 @@ namespace WHMAllocation.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("LastChangedAt")
                         .HasColumnType("TEXT");
 

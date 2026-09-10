@@ -16,6 +16,9 @@ public class OrderLineConfiguration
         builder.Property(x => x.RequestedQuantity)
             .IsRequired();
 
+        builder.Property(x => x.IsCancelled)
+            .IsRequired();
+
         builder.HasOne(x => x.Product)
             .WithMany()
             .HasForeignKey(x => x.ProductId)

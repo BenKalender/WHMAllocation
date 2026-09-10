@@ -32,5 +32,11 @@ public class OrderRepository : BaseRepository<Order>, IOrderRepository
             .ToListAsync();
     }
 
-    
+    public async Task<Order?> GetByOrderLineIdAsync(Guid orderLineId)
+    {
+        return await _dbContext.Orders
+            .Include(x => x.OrderLines)
+                .ThenInclude(x => x.Allocations)
+            .FirstOrDefaultAsync(x => x.OrderLines.Any(l => l.Id == orderLineId));
+    }
 }

@@ -1,4 +1,3 @@
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.EntityFrameworkCore;
 using WHMAllocation.Core.Entities;
 using WHMAllocation.Core.Interfaces.Repositories;
