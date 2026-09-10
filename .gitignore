@@ -77,3 +77,4 @@ nunit-*.xml
 *.json
 *.ico
 *.xml
+SM/*
