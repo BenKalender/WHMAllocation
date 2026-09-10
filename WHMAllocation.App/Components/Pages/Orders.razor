@@ -1,0 +1,282 @@
+@page "/orders"
+
+<PageTitle>Orders</PageTitle>
+
+<div class="container-fluid px-3 px-lg-4 py-4">
+  <div class="page-heading">
+    <div class="page-heading-copy">
+      <span class="page-icon"><i class="bi bi-speedometer2" aria-hidden="true"></i></span>
+      <div>
+        <p class="eyebrow mb-1">Overview</p>
+        <h1 class="h3 mb-1">Orders</h1>
+        <p class="text-muted mb-0">Manage customer orders, inventory allocation, SKU availability,
+          and warehouse operations from one centralized workspace.</p>
+        </div>
+      </div>
+    
+      </div>
+
+      <section class="row g-3 mt-1" aria-label="Dashboard metrics">
+        <div class="col-12 col-sm-6 col-xl-3">
+          <article class="metric-card metric-primary">
+            <div class="metric-top">
+              <span class="metric-label">Released Orders</span>
+              <span class="metric-icon"><i class="fs-3 bi bi-box-seam-fill text-info"></i></span>
+            </div>
+            <div class="metric-value">23</div>
+            <div class="metric-meta">
+              <span class="text-primary">ERP'den geldi</span>
+              <span>Henüz allocate edilmedi</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+          <article class="metric-card metric-success">
+            <div class="metric-top">
+              <span class="metric-label">Allocated Orders</span>
+              <span class="metric-icon"><i class="fs-3 bi bi-bag-check" aria-hidden="true"></i></span>
+            </div>
+            <div class="metric-value">16</div>
+            <div class="metric-meta">
+              <span class="text-success">Stok tahsisi tamamlandı</span>
+              <span>Gönderime hazır</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+          <article class="metric-card metric-danger">
+            <div class="metric-top">
+              <span class="metric-label">Stock Issues</span>
+              <span class="metric-icon"><i class="fs-3 bi-exclamation-triangle-fill text-danger"></i></span>
+            </div>
+            <div class="metric-value">5</div>
+            <div class="metric-meta">
+              <span class="text-danger">CompleteDeliveryRequired</span>
+              <span>ama stok yetersiz</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+          <article class="metric-card metric-warning">
+            <div class="metric-top">
+              <span class="metric-label">Locked Locations</span>
+              <span class="metric-icon"><i class="fs-3 bi bi-building-lock text-warning"></i></span>
+            </div>
+            <div class="metric-value">36</div>
+            <div class="metric-meta">
+              <span class="text-secondary">Kullanılamayan raf sayısı</span>
+              <span></span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="row g-3 mt-1">
+        <div class="col-12 col-xl-8">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="h5 mb-1 section-title"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i><span>Order Status
+                  Overview</span></h2>
+                  <p class="text-muted mb-0">Orders Created Over Time</p>
+                </div>
+                <a class="btn btn-light btn-sm" href="charts.html">View Details</a>
+              </div>
+
+              <div class="chart-bars" aria-label="Order Status Overview chart">
+                <div class="chart-column bar-42"><span></span><small>Jan</small></div>
+                <div class="chart-column bar-58"><span></span><small>Feb</small></div>
+                <div class="chart-column bar-51"><span></span><small>Mar</small></div>
+                <div class="chart-column bar-72"><span></span><small>Apr</small></div>
+                <div class="chart-column bar-66"><span></span><small>May</small></div>
+                <div class="chart-column bar-83"><span></span><small>Jun</small></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12 col-xl-4">
+            <div class="panel h-100">
+              <div class="panel-header">
+                <div>
+                  <h2 class="h5 mb-1 section-title"><i class="bi bi-pie-chart" aria-hidden="true"></i>
+                    <span>Order Priorty</span>
+                  </h2>
+                  <p class="text-muted mb-0">Revenue contribution by source.</p>
+                </div>
+              </div>
+              <div class="donut-chart mx-auto"><span>68%</span></div>
+              <div class="legend-list mt-3
+                ">
+                <div><span class="legend-dot bg-primary"></span>Low<strong>42%</strong></div>
+                <div><span class="legend-dot bg-success"></span>Normal<strong>26%</strong></div>
+                <div><span class="legend-dot bg-danger"></span>High<strong>14%</strong></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel mt-3">
+          <div class="panel-header">
+            <div>
+              <h2 class="h5 mb-1 section-title"><i class="bi bi-people" aria-hidden="true"></i><span>Recent Orders</span></h2>
+              <p class="text-muted mb-0">Recent customer orders and their allocation status within the warehouse management
+                system..</p>
+              </div>
+              <a class="btn btn-outline-secondary btn-sm" href="users.html">Manage Users</a>
+            </div>
+            <div class="table-responsive">
+              <table class="table align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th scope="col">Order</th>
+                    <th scope="col">Priority</th>
+                    <th scope="col">Complete Delivery</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Created</th>
+                    <th scope="col" class="text-end">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+
+                  <tr>
+                    <td>
+                      <div>
+                        <p class="fw-semibold mb-0">ORD-1001</p>
+                        <p class="text-muted small mb-0">
+                          Apple Juice (25), Orange Juice (10)
+                        </p>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge text-bg-danger">High</span>
+                    </td>
+                    <td>
+                     <p class="fw-semibold mb-0">Yes  <i class="fs-2 bi bi-bag-x text-success"></i></p>        
+                     </td>
+                    <td>
+                      <span class="badge text-bg-success">
+                        Allocated
+                      </span>
+                    </td>
+                    <td>Sep 10, 2026</td>
+                    <td class="text-end">
+                      <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td>
+                      <div>
+                        <p class="fw-semibold mb-0">ORD-1002</p>
+                        <p class="text-muted small mb-0">
+                          Cola (15)
+                        </p>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge text-bg-warning">Normal</span>
+                    </td>
+                    <td>
+                     <p class="fw-semibold mb-0">No  <i class="fs-2 bi bi-bag-x text-danger"></i></p>
+                      </td>
+                    <td>
+                      <span class="badge text-bg-info">
+                        Released
+                      </span>
+                    </td>
+                    <td>Sep 10, 2026</td>
+                    <td class="text-end">
+                       <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td>
+                      <div>
+                        <p class="fw-semibold mb-0">ORD-1003</p>
+                        <p class="text-muted small mb-0">
+                          Orange Juice (50)
+                        </p>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge text-bg-danger">High</span>
+                    </td>
+                    <td><p class="fw-semibold mb-0">No  <i class="fs-2 bi bi-bag-x text-danger"></i></p>       </td>
+                    <td>
+                      <span class="badge text-bg-secondary">
+                        Partially Allocated
+                      </span>
+                    </td>
+                    <td>Sep 09, 2026</td>
+                    <td class="text-end">
+                       <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td>
+                      <div>
+                        <p class="fw-semibold mb-0">ORD-1004</p>
+                        <p class="text-muted small mb-0">
+                          Apple Juice (100)
+                        </p>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge text-bg-warning">Normal</span>
+                    </td>
+                    <td>
+                      <p class="fw-semibold mb-0">Yes  
+                      <i class="fs-2 bi bi-bag-check text-success"></i></p> 
+                      </td>
+                    <td>
+                      <span class="badge text-bg-danger">
+                        Cancelled
+                      </span>
+                    </td>
+                    <td>Sep 08, 2026</td>
+                    <td class="text-end">
+                     <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td>
+                      <div>
+                        <p class="fw-semibold mb-0">ORD-1005</p>
+                        <p class="text-muted small mb-0">
+                          Cola (20), Water (30)
+                        </p>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge text-bg-secondary">Low</span>
+                    </td>
+                    <td>
+                       <p class="fw-semibold mb-0">Yes  
+                      <i class="fs-2 bi bi-bag-check text-success"></i></p> 
+                    </td>
+                    <td>
+                      <span class="badge text-bg-success">
+                        Allocated
+                      </span>
+                    </td>
+                    <td>
+                    Sep 08, 2026
+                    </td>
+                    <td class="text-end">
+                      <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
+                    </td>
+                  </tr>
+
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+ 

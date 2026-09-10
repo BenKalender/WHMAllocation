@@ -1,23 +1,43 @@
 ﻿@inherits LayoutComponentBase
+ <div class="admin-shell">
+    <div class="sidebar-backdrop" data-sidebar-close></div>
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
+    <aside class="admin-sidebar" id="adminSidebar" aria-label="Main navigation">
+      <div class="sidebar-header">
+        <a class="brand-mark" href="index.html" aria-label="adminHMD dashboard">
+          <span class="brand-icon"><i class="bi bi-grid-1x2-fill" aria-hidden="true"></i></span>
+          <span class="brand-copy">
+            <span class="brand-title">Mammut</span>
+            <span class="brand-subtitle">Warehouse Management App</span>
+          </span>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a  id="dashboardLink" class="nav-link" href="/dashboard">
+          <span class="nav-icon"><i class="bi bi-speedometer2" aria-hidden="true"></i></span>
+          <span class="nav-text">Dashboard</span>
+        </a>
+        <a id="ordersLink" class="nav-link" href="/orders">
+          <span class="nav-icon"><i class="bi bi-people" aria-hidden="true"></i></span>
+          <span class="nav-text">Orders</span>
+        </a>
+        
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="status-dot"></span>
+        <span class="sidebar-footer-text">System running smoothly</span>
+      </div>
+    </aside>
+
+    <div class="admin-main">
+      <NavMenu/>
+
+      <main class="dashboard-content">
+        @Body
+      </main>
+
+     <Footer/>
     </div>
-
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
-
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
-
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
-</div>
+  </div>

@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
-using WHMAllocation.App.Components;
 using WHMAllocation.Infrastructure.Persistence;
 using WHMAllocation.Infrastructure.Repositories;
 using WHMAllocation.Core.Interfaces.Repositories;
 using WHMAllocation.Core.Interfaces.Services;
 using WHMAllocation.Core.Services;
 using WHMAllocation.Core.Interfaces;
+using WHMAllocation.App.Components;
+
 
 var builder = WebApplication.CreateBuilder(args);
 

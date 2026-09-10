@@ -11,10 +11,13 @@ public class InventoryCorrectionService : IInventoryCorrectionService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISkuRepository _skuRepository;
     private readonly IAllocationRepository _allocationRepository;
+    private readonly IOrderRepository _orderRepository;
 
-    public InventoryCorrectionService(IUnitOfWork unitOfWork, ISkuRepository skuRepository, IAllocationRepository allocationRepository)
+
+    public InventoryCorrectionService(IUnitOfWork unitOfWork, IOrderRepository orderRepository, ISkuRepository skuRepository, IAllocationRepository allocationRepository)
     {
         _unitOfWork = unitOfWork;
+        _orderRepository = orderRepository;
         _skuRepository = skuRepository;
         _allocationRepository = allocationRepository;
     }
@@ -66,6 +69,16 @@ public class InventoryCorrectionService : IInventoryCorrectionService
 
             substituteSku.Quantity -= quantityToAllocate;
 
+            var substitudeAllocation = new Allocation
+            {
+                OrderLineId = allocation.OrderLineId,
+                SkuId = substituteSku.Id,
+                Quantity = quantityToAllocate,
+                IsActive = true
+            };
+
+            await _allocationRepository.AddAsync(substitudeAllocation);
+
             await _skuRepository.UpdateAsync(substituteSku);
 
             missingQuantity -= quantityToAllocate;
@@ -105,5 +118,6 @@ public class InventoryCorrectionService : IInventoryCorrectionService
         }
 
         order.Status = OrderStatus.Released;
+        await _orderRepository.UpdateAsync(order);
     }
 }

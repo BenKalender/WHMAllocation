@@ -69,3 +69,11 @@ nunit-*.xml
 
 # EF Local Tools
 .config/dotnet-tools.json
+
+*.jpg
+*.jpeg 
+*.png
+*.svg
+*.json
+*.ico
+*.xml
