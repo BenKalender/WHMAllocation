@@ -37,24 +37,35 @@ public class AllocationService : IAllocationService
 
     private async Task AllocateOrderAsync(Order order)
     {
+        // A cancelled line keeps its row but must never receive stock again.
+        List<OrderLine> allocatableLines = order.OrderLines
+            .Where(x => !x.IsCancelled)
+            .ToList();
+
+        if (allocatableLines.Count == 0)
+            return;
+
         if (order.CompleteDeliveryRequired)
         {
-            var canAllocate = await CanFullyAllocateAsync(order);
+            var canAllocate = await CanFullyAllocateAsync(allocatableLines);
 
             if (!canAllocate)
-                return;                
+                return;
         }
 
-        int totalRequested = order.OrderLines.Sum(x => x.RequestedQuantity);
+        int totalRequested = allocatableLines.Sum(x => x.RequestedQuantity);
 
-        foreach(var orderLine in order.OrderLines)
+        int totalAllocated = 0;
+
+        foreach(var orderLine in allocatableLines)
         {
-            await AllocateLineAsync(orderLine);
+            totalAllocated += await AllocateLineAsync(orderLine);
         }
 
-        int totalAllocated = order.OrderLines
-            .SelectMany(x => x.Allocations)
-            .Sum(x => x.Quantity);
+        // Nothing reserved means the order is untouched, so it stays Released and
+        // will be retried on the next run once stock arrives.
+        if (totalAllocated == 0)
+            return;
 
         order.Status = totalAllocated >= totalRequested ? OrderStatus.Allocated : OrderStatus.PartiallyAllocated;
 
@@ -63,25 +74,45 @@ public class AllocationService : IAllocationService
         await _unitOfWork.SaveChangesAsync();
     }
 
-    private async Task<bool> CanFullyAllocateAsync(Order order)
+    /// <summary>
+    /// Lines are grouped by product first: two lines asking for the same product compete
+    /// for the same stock, so checking each line against the full availability on its own
+    /// would let an order through that cannot actually be delivered complete.
+    /// </summary>
+    private async Task<bool> CanFullyAllocateAsync(IReadOnlyCollection<OrderLine> orderLines)
     {
-        foreach(var orderLine in order.OrderLines)
+        var requestedByProduct = orderLines
+            .GroupBy(x => x.ProductId)
+            .Select(x => new
+            {
+                ProductId = x.Key,
+                RequestedQuantity = x.Sum(line => line.RequestedQuantity)
+            });
+
+        foreach(var requested in requestedByProduct)
         {
-            List<Sku> availableSkus = await _skuRepository.GetAvailableSkusByProductAsync(orderLine.ProductId);
+            List<Sku> availableSkus = await _skuRepository.GetAvailableSkusByProductAsync(requested.ProductId);
 
             int totalAvailableQuantity = availableSkus.Sum(x => x.Quantity);
 
-            if (totalAvailableQuantity < orderLine.RequestedQuantity)
+            if (totalAvailableQuantity < requested.RequestedQuantity)
                 return false;
         }
         return true;
     }
 
-    private async Task AllocateLineAsync(OrderLine orderLine)
+    /// <summary>
+    /// Returns the quantity actually allocated. The caller sums these rather than reading
+    /// back <see cref="OrderLine.Allocations"/>, which may still hold deactivated
+    /// allocations from an earlier run.
+    /// </summary>
+    private async Task<int> AllocateLineAsync(OrderLine orderLine)
     {
         List<Sku> availableSkus = await _skuRepository.GetAvailableSkusByProductAsync(orderLine.ProductId);
 
         int remainingQuantity = orderLine.RequestedQuantity;
+
+        int allocatedQuantity = 0;
 
         foreach(var sku in availableSkus)
         {
@@ -89,11 +120,18 @@ public class AllocationService : IAllocationService
                 break;
 
             int quantityToAllocate = Math.Min(remainingQuantity, sku.Quantity);
-            
+
+            if (quantityToAllocate <= 0)
+                continue;
+
             await CreateAllocationAsync(orderLine, sku, quantityToAllocate);
 
             remainingQuantity -= quantityToAllocate;
+
+            allocatedQuantity += quantityToAllocate;
         }
+
+        return allocatedQuantity;
     }
 
     private async Task CreateAllocationAsync(OrderLine orderLine, Sku sku, int quantity)
