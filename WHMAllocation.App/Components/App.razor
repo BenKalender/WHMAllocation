@@ -3,7 +3,9 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Mammoth Warehouse App">
+    <title>Mammut | Warehause Management App</title>
     <base href="/" />
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
@@ -12,12 +14,19 @@
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
     <HeadOutlet />
+    <link rel="stylesheet" href="adminhmd/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="adminhmd/vendors/bootstrap-icons/bootstrap-icons.css" />
+    <link rel="stylesheet" href="adminhmd/css/style.css" />
 </head>
 
 <body>
     <Routes />
-    <ReconnectModal />
+ 
+
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+
+    <script src="@Assets["adminhmd/js/bootstrap.bundle.min.js"]"></script>
+    <script src="@Assets["adminhmd/js/main.js"]"></script>
 </body>
 
 </html>
