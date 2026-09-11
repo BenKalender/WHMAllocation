@@ -20,6 +20,8 @@
   <ItemGroup>
     <ProjectReference Include="..\WHMAllocation.Core\WHMAllocation.Core.csproj" />
     <ProjectReference Include="..\WHMAllocation.Infrastructure\WHMAllocation.Infrastructure.csproj" />
+    <!-- For the presentation-layer helpers in WHMAllocation.App/Display (OrderQuery, Badges). -->
+    <ProjectReference Include="..\WHMAllocation.App\WHMAllocation.App.csproj" />
   </ItemGroup>
 
 </Project>

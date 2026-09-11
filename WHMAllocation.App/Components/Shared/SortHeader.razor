@@ -1,0 +1,40 @@
+@using WHMAllocation.App.Display
+
+@*
+  A sortable column header. Rendered as a button rather than a clickable <th> so it is reachable
+  by keyboard and announced as actionable.
+*@
+
+<button type="button"
+        class="btn btn-link p-0 text-decoration-none text-reset fw-semibold d-inline-flex align-items-center gap-1"
+        @onclick="() => OnSort.InvokeAsync(Column)">
+  <span>@Label</span>
+  @if (IsActive)
+  {
+    <i class="bi @(Descending ? "bi-caret-down-fill" : "bi-caret-up-fill")" aria-hidden="true"></i>
+  }
+  else
+  {
+    <i class="bi bi-arrow-down-up text-muted small" aria-hidden="true"></i>
+  }
+</button>
+
+@code {
+    [Parameter, EditorRequired]
+    public OrderSortColumn Column { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>The column the table is currently sorted by.</summary>
+    [Parameter, EditorRequired]
+    public OrderSortColumn Active { get; set; }
+
+    [Parameter]
+    public bool Descending { get; set; }
+
+    [Parameter]
+    public EventCallback<OrderSortColumn> OnSort { get; set; }
+
+    private bool IsActive => Active == Column;
+}

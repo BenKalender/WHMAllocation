@@ -3,7 +3,6 @@
 @using WHMAllocation.App.Display
 @inject IOrderRepository OrderRepository
 @inject IAllocationService AllocationService
-@inject NavigationManager Navigation
 
 <PageTitle>Orders</PageTitle>
 
@@ -62,36 +61,76 @@
     </div>
   }
 
+  @*
+    Filter and sort once per render: the markup reads the result in three places, and a
+    computed property would redo the whole pass each time.
+  *@
+  @{
+    var filter = OrderQuery.ParseFilter(_filterText);
+    var visibleOrders = OrderQuery
+        .Sort(_orders.Where(x => OrderQuery.Matches(x, filter)), _sortColumn, _sortDescending)
+        .ToList();
+  }
+
   <section class="panel mt-3">
     <div class="panel-header">
       <div>
         <h2 class="h5 mb-1 section-title">
           <i class="bi bi-list-ul" aria-hidden="true"></i><span>All Orders</span>
         </h2>
-        <p class="text-muted mb-0">@_orders.Count order(s) in the warehouse.</p>
+        <p class="text-muted mb-0">
+          @if (filter.IsEmpty)
+          {
+            @($"{_orders.Count} order(s) in the warehouse.")
+          }
+          else
+          {
+            @($"{visibleOrders.Count} of {_orders.Count} order(s) match this filter.")
+          }
+        </p>
       </div>
       <input class="form-control search-input table-search" type="search"
-             placeholder="Filter orders" aria-label="Filter orders" data-table-search="ordersTable" />
+             placeholder="priority:high status:released"
+             aria-label="Filter orders"
+             @bind="_filterText" @bind:event="oninput" />
     </div>
 
     <div class="table-responsive">
       <table class="table align-middle mb-0" id="ordersTable">
         <thead>
           <tr>
-            <th scope="col">Order</th>
-            <th scope="col">Priority</th>
-            <th scope="col">Complete Delivery</th>
-            <th scope="col">Status</th>
-            <th scope="col">Allocated</th>
-            <th scope="col">Created</th>
+            <th scope="col" aria-sort="@AriaSort(OrderSortColumn.Number)">
+              <SortHeader Column="OrderSortColumn.Number" Label="Order"
+                          Active="_sortColumn" Descending="_sortDescending" OnSort="SortBy" />
+            </th>
+            <th scope="col" aria-sort="@AriaSort(OrderSortColumn.Priority)">
+              <SortHeader Column="OrderSortColumn.Priority" Label="Priority"
+                          Active="_sortColumn" Descending="_sortDescending" OnSort="SortBy" />
+            </th>
+            <th scope="col" aria-sort="@AriaSort(OrderSortColumn.CompleteDelivery)">
+              <SortHeader Column="OrderSortColumn.CompleteDelivery" Label="Complete Delivery"
+                          Active="_sortColumn" Descending="_sortDescending" OnSort="SortBy" />
+            </th>
+            <th scope="col" aria-sort="@AriaSort(OrderSortColumn.Status)">
+              <SortHeader Column="OrderSortColumn.Status" Label="Status"
+                          Active="_sortColumn" Descending="_sortDescending" OnSort="SortBy" />
+            </th>
+            <th scope="col" aria-sort="@AriaSort(OrderSortColumn.Allocated)">
+              <SortHeader Column="OrderSortColumn.Allocated" Label="Allocated"
+                          Active="_sortColumn" Descending="_sortDescending" OnSort="SortBy" />
+            </th>
+            <th scope="col" aria-sort="@AriaSort(OrderSortColumn.Created)">
+              <SortHeader Column="OrderSortColumn.Created" Label="Created"
+                          Active="_sortColumn" Descending="_sortDescending" OnSort="SortBy" />
+            </th>
             <th scope="col" class="text-end">Action</th>
           </tr>
         </thead>
         <tbody>
-          @foreach (var order in _orders)
+          @foreach (var order in visibleOrders)
           {
-            var requested = order.OrderLines.Where(x => !x.IsCancelled).Sum(x => x.RequestedQuantity);
-            var allocated = order.OrderLines.SelectMany(x => x.Allocations).Where(x => x.IsActive).Sum(x => x.Quantity);
+            var requested = OrderQuery.RequestedQuantity(order);
+            var allocated = OrderQuery.AllocatedQuantity(order);
 
             <tr>
               <td>
@@ -127,10 +166,18 @@
             </tr>
           }
 
-          @if (_orders.Count == 0)
+          @if (visibleOrders.Count == 0)
           {
             <tr>
-              <td colspan="7" class="text-center text-muted py-4">No orders found.</td>
+              <td colspan="7" class="text-center text-muted py-4">
+                <p class="mb-2">No orders match this filter.</p>
+                <p class="small mb-1">Try:</p>
+                <p class="small mb-0"><code>priority:</code> low | normal | high</p>
+                <p class="small mb-0"><code>status:</code> released | allocated | partial | cancelled</p>
+                <p class="small mb-0"><code>complete:</code> yes | no</p>
+                <p class="small mb-0"><code>allocated:</code> none | partial | full</p>
+                <p class="small mb-0 mt-2">Anything without a colon searches order number and product.</p>
+              </td>
             </tr>
           }
         </tbody>
@@ -143,6 +190,10 @@
     private List<Order> _orders = [];
     private AllocationRunResult? _runResult;
     private bool _isRunning;
+
+    private string? _filterText;
+    private OrderSortColumn _sortColumn = OrderSortColumn.Priority;
+    private bool _sortDescending = true;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -163,6 +214,22 @@
             _isRunning = false;
         }
     }
+
+    /// <summary>Clicking the active column flips direction; a new column starts at its natural one.</summary>
+    private void SortBy(OrderSortColumn column)
+    {
+        if (_sortColumn == column)
+        {
+            _sortDescending = !_sortDescending;
+            return;
+        }
+
+        _sortColumn = column;
+        _sortDescending = OrderQuery.DefaultDescendingFor(column);
+    }
+
+    private string AriaSort(OrderSortColumn column) =>
+        _sortColumn != column ? "none" : _sortDescending ? "descending" : "ascending";
 
     private static string LineSummary(Order order)
     {
