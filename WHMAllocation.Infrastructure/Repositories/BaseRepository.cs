@@ -32,7 +32,13 @@ public class BaseRepository<T> : IBaseRepository<T>
     {
         entity.LastChangedAt = DateTime.UtcNow;
 
-        _dbSet.Update(entity);
+        // Only a detached entity needs attaching. Anything the context already tracks is
+        // handled by change detection on save, and calling Update on it would be actively
+        // harmful: on an Added entity it flips the state to Modified, emitting an UPDATE for
+        // a row that does not exist yet. That happens for real when an inventory correction
+        // creates a substitute allocation and then has to deallocate the whole order.
+        if (_dbContext.Entry(entity).State == EntityState.Detached)
+            _dbSet.Update(entity);
 
         return Task.CompletedTask;
     }

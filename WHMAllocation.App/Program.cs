@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using WHMAllocation.Infrastructure.Persistence;
+using WHMAllocation.Infrastructure.Persistence.Seed;
 using WHMAllocation.Infrastructure.Repositories;
 using WHMAllocation.Core.Interfaces.Repositories;
 using WHMAllocation.Core.Interfaces.Services;
@@ -26,8 +27,25 @@ builder.Services.AddScoped<IAllocationService, AllocationService>();
 builder.Services.AddScoped<IOrderCancellationService, OrderCancellationService>();
 builder.Services.AddScoped<IInventoryCorrectionService, InventoryCorrectionService>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<DatabaseSeeder>();
 
 var app = builder.Build();
+
+// Development only: applying migrations automatically is convenient for the demo but is not
+// something to do on a real deployment.
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await dbContext.Database.MigrateAsync();
+
+    var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+    var seeded = await seeder.SeedAsync();
+
+    app.Logger.LogInformation(
+        seeded ? "Demo data seeded." : "Existing data found, seeding skipped.");
+}
 
 app.UseHttpsRedirection();
 
