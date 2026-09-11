@@ -5,6 +5,7 @@ using WHMAllocation.Core.Entities;
 using WHMAllocation.Core.Enums;
 using WHMAllocation.Core.Interfaces;
 using WHMAllocation.Core.Interfaces.Repositories;
+using WHMAllocation.Core.Results;
 using WHMAllocation.Core.Services;
 
 namespace WHMAllocation.Tests.Services;
@@ -396,5 +397,138 @@ public class AllocationServiceTests
         firstOrder.Status.Should().Be(OrderStatus.Allocated);
         secondOrder.Status.Should().Be(OrderStatus.Allocated);
         sku.Quantity.Should().Be(3);
+    }
+
+    // ---- Run result reporting -------------------------------------------------------
+
+    [TestMethod]
+    public async Task Result_Should_Report_Full_And_Partial_Allocations_Separately()
+    {
+        var productId = Guid.NewGuid();
+
+        var fullOrder = new Order
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "ORD-FULL",
+            Priority = Priority.High,
+            Status = OrderStatus.Released,
+            OrderLines = [new OrderLine { Id = Guid.NewGuid(), ProductId = productId, RequestedQuantity = 10 }]
+        };
+
+        var partialOrder = new Order
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "ORD-PARTIAL",
+            Priority = Priority.Low,
+            Status = OrderStatus.Released,
+            OrderLines = [new OrderLine { Id = Guid.NewGuid(), ProductId = productId, RequestedQuantity = 10 }]
+        };
+
+        var sku = new Sku { Id = Guid.NewGuid(), ProductId = productId, Quantity = 14 };
+
+        _orderRepository.Setup(x => x.GetReleasedOrdersAsync()).ReturnsAsync([fullOrder, partialOrder]);
+
+        SetupAvailableSkus(productId, sku);
+
+        var result = await CreateService().AllocateReleasedOrdersAsync();
+
+        result.OrdersProcessed.Should().Be(2);
+        result.FullyAllocatedCount.Should().Be(1);
+        result.PartiallyAllocatedCount.Should().Be(1);
+        result.SkippedCount.Should().Be(0);
+        result.TotalQuantityAllocated.Should().Be(14);
+        result.AllocatedNothing.Should().BeFalse();
+
+        var full = result.Orders.Single(x => x.OrderNumber == "ORD-FULL");
+        full.Outcome.Should().Be(OrderAllocationOutcome.FullyAllocated);
+        full.AllocatedQuantity.Should().Be(10);
+        full.RequestedQuantity.Should().Be(10);
+        full.IsSkipped.Should().BeFalse();
+
+        var partial = result.Orders.Single(x => x.OrderNumber == "ORD-PARTIAL");
+        partial.Outcome.Should().Be(OrderAllocationOutcome.PartiallyAllocated);
+        partial.AllocatedQuantity.Should().Be(4);
+        partial.RequestedQuantity.Should().Be(10);
+    }
+
+    /// <summary>
+    /// "Refused because complete delivery was impossible" and "there was simply no stock" both
+    /// leave the order Released, but a user needs to be told which one happened.
+    /// </summary>
+    [TestMethod]
+    public async Task Result_Should_Distinguish_Complete_Delivery_Refusal_From_No_Stock()
+    {
+        var scarceProductId = Guid.NewGuid();
+        var emptyProductId = Guid.NewGuid();
+
+        var completeDeliveryOrder = new Order
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "ORD-COMPLETE",
+            Status = OrderStatus.Released,
+            CompleteDeliveryRequired = true,
+            OrderLines = [new OrderLine { Id = Guid.NewGuid(), ProductId = scarceProductId, RequestedQuantity = 100 }]
+        };
+
+        var noStockOrder = new Order
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "ORD-NOSTOCK",
+            Status = OrderStatus.Released,
+            OrderLines = [new OrderLine { Id = Guid.NewGuid(), ProductId = emptyProductId, RequestedQuantity = 5 }]
+        };
+
+        _orderRepository.Setup(x => x.GetReleasedOrdersAsync())
+            .ReturnsAsync([completeDeliveryOrder, noStockOrder]);
+
+        SetupAvailableSkus(scarceProductId, new Sku { Id = Guid.NewGuid(), ProductId = scarceProductId, Quantity = 50 });
+        SetupAvailableSkus(emptyProductId);
+
+        var result = await CreateService().AllocateReleasedOrdersAsync();
+
+        result.Orders.Single(x => x.OrderNumber == "ORD-COMPLETE").Outcome
+            .Should().Be(OrderAllocationOutcome.SkippedCompleteDeliveryNotPossible);
+
+        result.Orders.Single(x => x.OrderNumber == "ORD-NOSTOCK").Outcome
+            .Should().Be(OrderAllocationOutcome.SkippedNoStock);
+
+        result.SkippedCount.Should().Be(2);
+        result.AllocatedNothing.Should().BeTrue();
+        result.Orders.Should().OnlyContain(x => x.IsSkipped);
+    }
+
+    [TestMethod]
+    public async Task Result_Should_Report_SkippedNoLines_When_Every_Line_Is_Cancelled()
+    {
+        var productId = Guid.NewGuid();
+
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            OrderNumber = "ORD-EMPTY",
+            Status = OrderStatus.Released,
+            OrderLines = [new OrderLine { Id = Guid.NewGuid(), ProductId = productId, RequestedQuantity = 10, IsCancelled = true }]
+        };
+
+        _orderRepository.Setup(x => x.GetReleasedOrdersAsync()).ReturnsAsync([order]);
+
+        SetupAvailableSkus(productId, new Sku { Id = Guid.NewGuid(), ProductId = productId, Quantity = 100 });
+
+        var result = await CreateService().AllocateReleasedOrdersAsync();
+
+        result.Orders.Single().Outcome.Should().Be(OrderAllocationOutcome.SkippedNoLines);
+        result.Orders.Single().RequestedQuantity.Should().Be(0, "a cancelled line asks for nothing");
+    }
+
+    [TestMethod]
+    public async Task Result_Should_Be_Empty_When_No_Orders_Are_Released()
+    {
+        _orderRepository.Setup(x => x.GetReleasedOrdersAsync()).ReturnsAsync([]);
+
+        var result = await CreateService().AllocateReleasedOrdersAsync();
+
+        result.OrdersProcessed.Should().Be(0);
+        result.Orders.Should().BeEmpty();
+        result.AllocatedNothing.Should().BeTrue();
     }
 }

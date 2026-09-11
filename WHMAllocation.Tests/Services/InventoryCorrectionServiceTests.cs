@@ -5,6 +5,7 @@ using WHMAllocation.Core.Entities;
 using WHMAllocation.Core.Enums;
 using WHMAllocation.Core.Interfaces;
 using WHMAllocation.Core.Interfaces.Repositories;
+using WHMAllocation.Core.Results;
 using WHMAllocation.Core.Services;
 
 namespace WHMAllocation.Tests.Services;
@@ -379,8 +380,143 @@ public class InventoryCorrectionServiceTests
     {
         _skuRepository.Setup(x => x.GetByIdAsync(It.IsAny<Guid>())).ReturnsAsync((Sku?)null);
 
-        await CreateService().CorrectSkuQuantityAsync(Guid.NewGuid(), 10);
+        var result = await CreateService().CorrectSkuQuantityAsync(Guid.NewGuid(), 10);
+
+        result.Outcome.Should().Be(CorrectionOutcome.SkuNotFound);
+        result.Succeeded.Should().BeFalse();
 
         _unitOfWork.Verify(x => x.SaveChangesAsync(), Times.Never);
+    }
+
+    // ---- Outcome reporting ----------------------------------------------------------
+
+    [TestMethod]
+    public async Task Result_Should_Report_NoShortfall_When_Reservations_Still_Covered()
+    {
+        var productId = Guid.NewGuid();
+
+        var sku = new Sku { Id = Guid.NewGuid(), ProductId = productId, Quantity = 2 };
+
+        var order = new Order { Id = Guid.NewGuid(), Status = OrderStatus.Allocated };
+        var line = BuildLine(order, productId, 8);
+        var allocation = BuildAllocation(line, sku, 8);
+
+        SetupSkus(sku);
+
+        _allocationRepository
+            .Setup(x => x.GetActiveAllocationsBySkuIdAsync(sku.Id))
+            .ReturnsAsync([allocation]);
+
+        var result = await CreateService().CorrectSkuQuantityAsync(sku.Id, 20);
+
+        result.Outcome.Should().Be(CorrectionOutcome.NoShortfall);
+        result.Succeeded.Should().BeTrue();
+        result.NewAvailableQuantity.Should().Be(12);
+        result.Shortfall.Should().Be(0);
+        result.HasUncoveredShortfall.Should().BeFalse();
+        result.DeallocatedOrderIds.Should().BeEmpty();
+        result.DowngradedOrderIds.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task Result_Should_Report_ShortfallCovered_When_Substitutes_Absorb_It()
+    {
+        var productId = Guid.NewGuid();
+
+        var correctedSku = new Sku { Id = Guid.NewGuid(), ProductId = productId, Quantity = 0 };
+        var substituteSku = new Sku { Id = Guid.NewGuid(), ProductId = productId, Quantity = 10 };
+
+        var order = new Order { Id = Guid.NewGuid(), Status = OrderStatus.Allocated };
+        var line = BuildLine(order, productId, 20);
+        var allocation = BuildAllocation(line, correctedSku, 20);
+
+        SetupSkus(correctedSku, substituteSku);
+        SetupAvailableSkus(productId, correctedSku, substituteSku);
+
+        _allocationRepository
+            .Setup(x => x.GetActiveAllocationsBySkuIdAsync(correctedSku.Id))
+            .ReturnsAsync([allocation]);
+
+        var result = await CreateService().CorrectSkuQuantityAsync(correctedSku.Id, 15);
+
+        result.Outcome.Should().Be(CorrectionOutcome.ShortfallCovered);
+        result.Shortfall.Should().Be(5);
+        result.CoveredBySubstitutes.Should().Be(5);
+        result.HasUncoveredShortfall.Should().BeFalse("every missing unit was re-sourced");
+        result.DeallocatedOrderIds.Should().BeEmpty();
+        result.DowngradedOrderIds.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task Result_Should_Report_Downgraded_Orders_When_Partial_Delivery_Allowed()
+    {
+        var productId = Guid.NewGuid();
+
+        var correctedSku = new Sku { Id = Guid.NewGuid(), ProductId = productId, Quantity = 0 };
+
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Allocated,
+            CompleteDeliveryRequired = false
+        };
+
+        var line = BuildLine(order, productId, 10);
+        var allocation = BuildAllocation(line, correctedSku, 10);
+
+        SetupSkus(correctedSku);
+        SetupAvailableSkus(productId, correctedSku);
+
+        _allocationRepository
+            .Setup(x => x.GetActiveAllocationsBySkuIdAsync(correctedSku.Id))
+            .ReturnsAsync([allocation]);
+
+        var result = await CreateService().CorrectSkuQuantityAsync(correctedSku.Id, 6);
+
+        result.Outcome.Should().Be(CorrectionOutcome.ShortfallPartiallyCovered);
+        result.Shortfall.Should().Be(4);
+        result.CoveredBySubstitutes.Should().Be(0, "there was no substitute stock");
+        result.HasUncoveredShortfall.Should().BeTrue();
+        result.DowngradedOrderIds.Should().ContainSingle().Which.Should().Be(order.Id);
+        result.DeallocatedOrderIds.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Releasing an order outranks a downgrade: it is the most disruptive thing a correction
+    /// can do, so that is what the caller is told about.
+    /// </summary>
+    [TestMethod]
+    public async Task Result_Should_Report_Deallocated_Orders_When_Complete_Delivery_Breaks()
+    {
+        var productId = Guid.NewGuid();
+
+        var correctedSku = new Sku { Id = Guid.NewGuid(), ProductId = productId, Quantity = 0 };
+
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Allocated,
+            CompleteDeliveryRequired = true
+        };
+
+        var line = BuildLine(order, productId, 10);
+        var allocation = BuildAllocation(line, correctedSku, 10);
+
+        SetupSkus(correctedSku);
+        SetupAvailableSkus(productId, correctedSku);
+
+        _allocationRepository
+            .Setup(x => x.GetActiveAllocationsBySkuIdAsync(correctedSku.Id))
+            .ReturnsAsync([allocation]);
+
+        _orderRepository.Setup(x => x.GetByIdAsync(order.Id)).ReturnsAsync(order);
+
+        var result = await CreateService().CorrectSkuQuantityAsync(correctedSku.Id, 2);
+
+        result.Outcome.Should().Be(CorrectionOutcome.OrdersDeallocated);
+        result.Shortfall.Should().Be(8);
+        result.DeallocatedOrderIds.Should().ContainSingle().Which.Should().Be(order.Id);
+
+        order.Status.Should().Be(OrderStatus.Released);
     }
 }

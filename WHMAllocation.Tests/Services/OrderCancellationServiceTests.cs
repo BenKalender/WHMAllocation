@@ -5,6 +5,7 @@ using WHMAllocation.Core.Entities;
 using WHMAllocation.Core.Enums;
 using WHMAllocation.Core.Interfaces;
 using WHMAllocation.Core.Interfaces.Repositories;
+using WHMAllocation.Core.Results;
 using WHMAllocation.Core.Services;
 
 namespace WHMAllocation.Tests.Services;
@@ -335,5 +336,168 @@ public class OrderCancellationServiceTests
 
         sku.Quantity.Should().Be(5, "an already released allocation must not be credited twice");
         order.Status.Should().Be(OrderStatus.Cancelled);
+    }
+
+    // ---- Outcome reporting ----------------------------------------------------------
+
+    /// <summary>
+    /// The three cases a UI has to tell apart, and which were previously indistinguishable
+    /// because every one of them returned silently.
+    /// </summary>
+    [TestMethod]
+    public async Task CancelOrder_Should_Distinguish_Cancelled_From_AlreadyCancelled_From_NotFound()
+    {
+        var sku = new Sku { Id = Guid.NewGuid(), Quantity = 0 };
+
+        var orderLine = new OrderLine { Id = Guid.NewGuid(), RequestedQuantity = 20 };
+        orderLine.Allocations.Add(new Allocation
+        {
+            Id = Guid.NewGuid(),
+            OrderLineId = orderLine.Id,
+            SkuId = sku.Id,
+            Quantity = 20,
+            IsActive = true
+        });
+
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Allocated,
+            OrderLines = [orderLine]
+        };
+
+        _orderRepository.Setup(x => x.GetByIdAsync(order.Id)).ReturnsAsync(order);
+        _orderRepository.Setup(x => x.GetByIdAsync(It.Is<Guid>(id => id != order.Id))).ReturnsAsync((Order?)null);
+
+        SetupAllocationsByLine(orderLine);
+        SetupSkus(sku);
+
+        var service = CreateService();
+
+        // 1. A real cancellation.
+        var cancelled = await service.CancelOrderAsync(order.Id);
+
+        cancelled.Outcome.Should().Be(CancellationOutcome.Cancelled);
+        cancelled.Succeeded.Should().BeTrue();
+        cancelled.ReleasedQuantity.Should().Be(20);
+        cancelled.AffectedLines.Should().Be(1);
+        cancelled.FinalStatus.Should().Be(OrderStatus.Cancelled);
+
+        // 2. The same call again, now a no-op.
+        var again = await service.CancelOrderAsync(order.Id);
+
+        again.Outcome.Should().Be(CancellationOutcome.OrderAlreadyCancelled);
+        again.Succeeded.Should().BeFalse();
+        again.ReleasedQuantity.Should().Be(0, "no stock may move on a repeat cancellation");
+        again.FinalStatus.Should().Be(OrderStatus.Cancelled);
+
+        // 3. An order that does not exist.
+        var missing = await service.CancelOrderAsync(Guid.NewGuid());
+
+        missing.Outcome.Should().Be(CancellationOutcome.OrderNotFound);
+        missing.Succeeded.Should().BeFalse();
+        missing.FinalStatus.Should().BeNull();
+
+        sku.Quantity.Should().Be(20, "stock was credited exactly once across all three calls");
+    }
+
+    [TestMethod]
+    public async Task CancelOrderLine_Should_Report_Released_Quantity_And_Final_Status()
+    {
+        var skuOne = new Sku { Id = Guid.NewGuid(), Quantity = 0 };
+        var skuTwo = new Sku { Id = Guid.NewGuid(), Quantity = 0 };
+
+        var cancelledLine = new OrderLine { Id = Guid.NewGuid(), RequestedQuantity = 10 };
+        cancelledLine.Allocations.Add(new Allocation
+        {
+            Id = Guid.NewGuid(),
+            OrderLineId = cancelledLine.Id,
+            SkuId = skuOne.Id,
+            Quantity = 10,
+            IsActive = true
+        });
+
+        var remainingLine = new OrderLine { Id = Guid.NewGuid(), RequestedQuantity = 10 };
+        remainingLine.Allocations.Add(new Allocation
+        {
+            Id = Guid.NewGuid(),
+            OrderLineId = remainingLine.Id,
+            SkuId = skuTwo.Id,
+            Quantity = 5,
+            IsActive = true
+        });
+
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Allocated,
+            OrderLines = [cancelledLine, remainingLine]
+        };
+
+        _orderRepository.Setup(x => x.GetByOrderLineIdAsync(cancelledLine.Id)).ReturnsAsync(order);
+
+        SetupAllocationsByLine(cancelledLine, remainingLine);
+        SetupSkus(skuOne, skuTwo);
+
+        var result = await CreateService().CancelOrderLineAsync(cancelledLine.Id);
+
+        result.Outcome.Should().Be(CancellationOutcome.Cancelled);
+        result.ReleasedQuantity.Should().Be(10);
+        result.AffectedLines.Should().Be(1);
+        result.FinalStatus.Should().Be(OrderStatus.PartiallyAllocated,
+            "the caller learns the order's new status without re-querying");
+    }
+
+    [TestMethod]
+    public async Task CancelOrderLine_Should_Report_LineNotFound()
+    {
+        _orderRepository.Setup(x => x.GetByOrderLineIdAsync(It.IsAny<Guid>())).ReturnsAsync((Order?)null);
+
+        var result = await CreateService().CancelOrderLineAsync(Guid.NewGuid());
+
+        result.Outcome.Should().Be(CancellationOutcome.OrderLineNotFound);
+        result.Succeeded.Should().BeFalse();
+
+        _unitOfWork.Verify(x => x.SaveChangesAsync(), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task CancelOrderLine_Should_Report_LineAlreadyCancelled()
+    {
+        var orderLine = new OrderLine { Id = Guid.NewGuid(), RequestedQuantity = 10, IsCancelled = true };
+
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Released,
+            OrderLines = [orderLine]
+        };
+
+        _orderRepository.Setup(x => x.GetByOrderLineIdAsync(orderLine.Id)).ReturnsAsync(order);
+
+        var result = await CreateService().CancelOrderLineAsync(orderLine.Id);
+
+        result.Outcome.Should().Be(CancellationOutcome.OrderLineAlreadyCancelled,
+            "distinct from the parent order being cancelled");
+        result.FinalStatus.Should().Be(OrderStatus.Released);
+    }
+
+    [TestMethod]
+    public async Task CancelOrderLine_Should_Report_OrderAlreadyCancelled()
+    {
+        var orderLine = new OrderLine { Id = Guid.NewGuid(), RequestedQuantity = 10 };
+
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Cancelled,
+            OrderLines = [orderLine]
+        };
+
+        _orderRepository.Setup(x => x.GetByOrderLineIdAsync(orderLine.Id)).ReturnsAsync(order);
+
+        var result = await CreateService().CancelOrderLineAsync(orderLine.Id);
+
+        result.Outcome.Should().Be(CancellationOutcome.OrderAlreadyCancelled);
     }
 }
