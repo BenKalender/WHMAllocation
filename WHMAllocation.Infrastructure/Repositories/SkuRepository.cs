@@ -24,4 +24,15 @@ public class SkuRepository
                 !x.WarehouseLocation.IsLocked)
             .ToListAsync();
     }
+
+    public async Task<List<Sku>> GetAllAsync()
+    {
+        return await _dbContext.Skus
+            .AsNoTracking()
+            .Include(x => x.Product)
+            .Include(x => x.WarehouseLocation)
+            .OrderBy(x => x.Product.ProductNumber)
+            .ThenBy(x => x.WarehouseLocation.Code)
+            .ToListAsync();
+    }
 }

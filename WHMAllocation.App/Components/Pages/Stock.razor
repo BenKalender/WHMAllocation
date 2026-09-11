@@ -1,0 +1,180 @@
+@page "/stock"
+@rendermode InteractiveServer
+@using WHMAllocation.App.Display
+@inject ISkuRepository SkuRepository
+@inject IAllocationRepository AllocationRepository
+@inject IInventoryCorrectionService CorrectionService
+
+<PageTitle>Stock</PageTitle>
+
+<div class="container-fluid px-3 px-lg-4 py-4">
+  <div class="page-heading">
+    <div class="page-heading-copy">
+      <span class="page-icon"><i class="bi bi-boxes" aria-hidden="true"></i></span>
+      <div>
+        <p class="eyebrow mb-1">Scenario 3</p>
+        <h1 class="h3 mb-1">Stock</h1>
+        <p class="text-muted mb-0">
+          Correct a SKU to its counted <strong>physical</strong> quantity. Available stock is derived
+          from it — if the count no longer covers what is reserved, substitutes are found automatically.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  @if (_result is not null)
+  {
+    <div class="alert @Badges.ForCorrection(_result) mt-3" role="alert">
+      <div class="fw-semibold mb-1">@_correctedSkuLabel</div>
+      <div class="small">@Badges.Describe(_result)</div>
+    </div>
+  }
+
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <div>
+        <h2 class="h5 mb-1 section-title">
+          <i class="bi bi-upc-scan" aria-hidden="true"></i><span>Stock Keeping Units</span>
+        </h2>
+        <p class="text-muted mb-0">
+          Physical = available + reserved. SKUs in locked locations are never allocated.
+        </p>
+      </div>
+      <input class="form-control search-input table-search" type="search"
+             placeholder="Filter SKUs" aria-label="Filter SKUs" data-table-search="stockTable" />
+    </div>
+
+    <div class="table-responsive">
+      <table class="table align-middle mb-0" id="stockTable">
+        <thead>
+          <tr>
+            <th scope="col">Product</th>
+            <th scope="col">Location</th>
+            <th scope="col">Available</th>
+            <th scope="col">Reserved</th>
+            <th scope="col">Physical</th>
+            <th scope="col" class="text-end">Correct physical count</th>
+          </tr>
+        </thead>
+        <tbody>
+          @foreach (var sku in _skus)
+          {
+            var reserved = _reservedBySku.GetValueOrDefault(sku.Id);
+            var locked = sku.WarehouseLocation?.IsLocked == true;
+
+            <tr>
+              <td>
+                <p class="fw-semibold mb-0">@(sku.Product?.Name ?? "Unknown")</p>
+                <p class="text-muted small mb-0">@(sku.Product?.ProductNumber ?? "-")</p>
+              </td>
+              <td>
+                <span class="fw-semibold">@(sku.WarehouseLocation?.Code ?? "-")</span>
+                @if (locked)
+                {
+                  <span class="badge text-bg-warning ms-1">
+                    <i class="bi bi-lock-fill" aria-hidden="true"></i> Locked
+                  </span>
+                }
+              </td>
+              <td class="fw-semibold">@sku.Quantity</td>
+              <td>
+                @if (reserved > 0)
+                {
+                  <span class="badge text-bg-info">@reserved</span>
+                }
+                else
+                {
+                  <span class="text-muted">0</span>
+                }
+              </td>
+              <td class="fw-semibold">@(sku.Quantity + reserved)</td>
+              <td>
+                <div class="d-flex gap-2 justify-content-end align-items-center">
+                  <input type="number" min="0" class="form-control form-control-sm" style="max-width: 7rem;"
+                         placeholder="@(sku.Quantity + reserved)"
+                         aria-label="@($"New physical count for {sku.Product?.ProductNumber} at {sku.WarehouseLocation?.Code}")"
+                         value="@_input.GetValueOrDefault(sku.Id)"
+                         @onchange="e => OnInputChanged(sku.Id, e.Value?.ToString())" />
+                  <button class="btn btn-primary btn-sm" type="button"
+                          @onclick="() => CorrectAsync(sku)"
+                          disabled="@(_isBusy || !IsInputValid(sku.Id))">
+                    <i class="bi bi-check2" aria-hidden="true"></i> Apply
+                  </button>
+                </div>
+              </td>
+            </tr>
+          }
+
+          @if (_skus.Count == 0)
+          {
+            <tr>
+              <td colspan="6" class="text-center text-muted py-4">No SKUs found.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+@code {
+    private List<Sku> _skus = [];
+    private Dictionary<Guid, int> _reservedBySku = [];
+    private readonly Dictionary<Guid, string?> _input = [];
+
+    private CorrectionResult? _result;
+    private string? _correctedSkuLabel;
+    private bool _isBusy;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _skus = await SkuRepository.GetAllAsync();
+
+        // Reserved is the sum of the SKU's active allocations; physical is available + reserved.
+        _reservedBySku = [];
+
+        foreach (var sku in _skus)
+        {
+            var allocations = await AllocationRepository.GetActiveAllocationsBySkuIdAsync(sku.Id);
+
+            _reservedBySku[sku.Id] = allocations.Sum(x => x.Quantity);
+        }
+    }
+
+    private void OnInputChanged(Guid skuId, string? value) => _input[skuId] = value;
+
+    /// <summary>
+    /// The service treats a negative count as a caller error rather than a domain outcome,
+    /// so the input is validated here before it is ever called.
+    /// </summary>
+    private bool IsInputValid(Guid skuId) =>
+        int.TryParse(_input.GetValueOrDefault(skuId), out var parsed) && parsed >= 0;
+
+    private async Task CorrectAsync(Sku sku)
+    {
+        if (!IsInputValid(sku.Id))
+            return;
+
+        var newQuantity = int.Parse(_input[sku.Id]!);
+
+        _isBusy = true;
+
+        try
+        {
+            _correctedSkuLabel =
+                $"{sku.Product?.ProductNumber} at {sku.WarehouseLocation?.Code} corrected to {newQuantity}";
+
+            _result = await CorrectionService.CorrectSkuQuantityAsync(sku.Id, newQuantity);
+
+            _input[sku.Id] = null;
+
+            await LoadAsync();
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+}
