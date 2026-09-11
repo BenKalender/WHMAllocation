@@ -3,6 +3,7 @@ using WHMAllocation.Core.Enums;
 using WHMAllocation.Core.Interfaces;
 using WHMAllocation.Core.Interfaces.Repositories;
 using WHMAllocation.Core.Interfaces.Services;
+using WHMAllocation.Core.Results;
 
 namespace WHMAllocation.Core.Services;
 
@@ -25,24 +26,29 @@ public class OrderCancellationService : IOrderCancellationService
         _skuRepository = skuRepository;
     }
 
-    public async Task CancelOrderAsync(Guid orderId)
+    public async Task<CancellationResult> CancelOrderAsync(Guid orderId)
     {
         var order = await _orderRepository.GetByIdAsync(orderId);
 
         if (order is null)
-            return;
+            return CancellationResult.NoChange(CancellationOutcome.OrderNotFound);
 
         if (order.Status == OrderStatus.Cancelled)
-            return;
+            return CancellationResult.NoChange(CancellationOutcome.OrderAlreadyCancelled, order.Status);
+
+        int releasedQuantity = 0;
+        int affectedLines = 0;
 
         foreach (var orderLine in order.OrderLines)
         {
             if (orderLine.IsCancelled)
                 continue;
 
-            await ReleaseAllocationsForLineAsync(orderLine.Id);
+            releasedQuantity += await ReleaseAllocationsForLineAsync(orderLine.Id);
 
             orderLine.IsCancelled = true;
+
+            affectedLines++;
         }
 
         order.Status = OrderStatus.Cancelled;
@@ -50,9 +56,15 @@ public class OrderCancellationService : IOrderCancellationService
         await _orderRepository.UpdateAsync(order);
 
         await _unitOfWork.SaveChangesAsync();
+
+        return new CancellationResult(
+            CancellationOutcome.Cancelled,
+            releasedQuantity,
+            affectedLines,
+            order.Status);
     }
 
-    public async Task CancelOrderLineAsync(Guid orderLineId)
+    public async Task<CancellationResult> CancelOrderLineAsync(Guid orderLineId)
     {
         var order = await _orderRepository.GetByOrderLineIdAsync(orderLineId);
 
@@ -60,12 +72,15 @@ public class OrderCancellationService : IOrderCancellationService
             .FirstOrDefault(x => x.Id == orderLineId);
 
         if (order is null || orderLine is null)
-            return;
+            return CancellationResult.NoChange(CancellationOutcome.OrderLineNotFound);
 
-        if (order.Status == OrderStatus.Cancelled || orderLine.IsCancelled)
-            return;
+        if (order.Status == OrderStatus.Cancelled)
+            return CancellationResult.NoChange(CancellationOutcome.OrderAlreadyCancelled, order.Status);
 
-        await ReleaseAllocationsForLineAsync(orderLineId);
+        if (orderLine.IsCancelled)
+            return CancellationResult.NoChange(CancellationOutcome.OrderLineAlreadyCancelled, order.Status);
+
+        int releasedQuantity = await ReleaseAllocationsForLineAsync(orderLineId);
 
         orderLine.IsCancelled = true;
 
@@ -74,6 +89,12 @@ public class OrderCancellationService : IOrderCancellationService
         await _orderRepository.UpdateAsync(order);
 
         await _unitOfWork.SaveChangesAsync();
+
+        return new CancellationResult(
+            CancellationOutcome.Cancelled,
+            releasedQuantity,
+            AffectedLines: 1,
+            order.Status);
     }
 
     /// <summary>
@@ -81,9 +102,12 @@ public class OrderCancellationService : IOrderCancellationService
     /// and deactivates the allocation. Does not save — the public entry points own the
     /// transaction boundary so that cancelling a whole order is a single write.
     /// </summary>
-    private async Task ReleaseAllocationsForLineAsync(Guid orderLineId)
+    /// <returns>The number of units actually returned to stock.</returns>
+    private async Task<int> ReleaseAllocationsForLineAsync(Guid orderLineId)
     {
         var allocations = await _allocationRepository.GetByOrderLineIdAsync(orderLineId);
+
+        int releasedQuantity = 0;
 
         foreach (var allocation in allocations)
         {
@@ -102,7 +126,11 @@ public class OrderCancellationService : IOrderCancellationService
             await _skuRepository.UpdateAsync(sku);
 
             await _allocationRepository.UpdateAsync(allocation);
+
+            releasedQuantity += allocation.Quantity;
         }
+
+        return releasedQuantity;
     }
 
     /// <summary>

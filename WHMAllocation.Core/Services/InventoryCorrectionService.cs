@@ -3,6 +3,7 @@ using WHMAllocation.Core.Enums;
 using WHMAllocation.Core.Interfaces;
 using WHMAllocation.Core.Interfaces.Repositories;
 using WHMAllocation.Core.Interfaces.Services;
+using WHMAllocation.Core.Results;
 
 namespace WHMAllocation.Core.Services;
 
@@ -31,7 +32,7 @@ public class InventoryCorrectionService : IInventoryCorrectionService
         _allocationRepository = allocationRepository;
     }
 
-    public async Task CorrectSkuQuantityAsync(Guid skuId, int newQuantity)
+    public async Task<CorrectionResult> CorrectSkuQuantityAsync(Guid skuId, int newQuantity)
     {
         if (newQuantity < 0)
             throw new ArgumentOutOfRangeException(nameof(newQuantity), "A corrected SKU quantity cannot be negative.");
@@ -39,7 +40,7 @@ public class InventoryCorrectionService : IInventoryCorrectionService
         var sku = await _skuRepository.GetByIdAsync(skuId);
 
         if (sku is null)
-            return;
+            return CorrectionResult.SkuNotFound;
 
         var activeAllocations = await _allocationRepository.GetActiveAllocationsBySkuIdAsync(skuId);
 
@@ -59,16 +60,47 @@ public class InventoryCorrectionService : IInventoryCorrectionService
             // Enough stock remains to honour every reservation. An increase also lands here
             // and simply frees more availability for the next allocation run.
             await _unitOfWork.SaveChangesAsync();
-            return;
+
+            return CorrectionResult.NoShortfall(sku.Quantity);
         }
 
-        await CoverShortfallAsync(sku, activeAllocations, shortfall: -newAvailable);
+        int shortfall = -newAvailable;
+
+        var impact = await CoverShortfallAsync(sku, activeAllocations, shortfall);
 
         await _unitOfWork.SaveChangesAsync();
+
+        // Reported by escalating severity: a released order is the most disruptive thing that
+        // can happen here, so it wins over a mere downgrade.
+        var outcome = impact.DeallocatedOrderIds.Count > 0
+            ? CorrectionOutcome.OrdersDeallocated
+            : impact.DowngradedOrderIds.Count > 0
+                ? CorrectionOutcome.ShortfallPartiallyCovered
+                : CorrectionOutcome.ShortfallCovered;
+
+        return new CorrectionResult(
+            outcome,
+            sku.Quantity,
+            shortfall,
+            impact.CoveredBySubstitutes,
+            impact.DeallocatedOrderIds,
+            impact.DowngradedOrderIds);
     }
 
-    private async Task CoverShortfallAsync(Sku sku, List<Allocation> activeAllocations, int shortfall)
+    /// <summary>What a shortfall cost: how much was re-sourced, and which orders suffered.</summary>
+    private sealed class ShortfallImpact
     {
+        public int CoveredBySubstitutes { get; set; }
+
+        public List<Guid> DeallocatedOrderIds { get; } = [];
+
+        public List<Guid> DowngradedOrderIds { get; } = [];
+    }
+
+    private async Task<ShortfallImpact> CoverShortfallAsync(Sku sku, List<Allocation> activeAllocations, int shortfall)
+    {
+        var impact = new ShortfallImpact();
+
         // Surrender stock from the least important reservations first: lowest priority, and
         // within a priority the most recent order, so established high-priority orders keep
         // what they already hold.
@@ -80,8 +112,6 @@ public class InventoryCorrectionService : IInventoryCorrectionService
         // Substitutes created here are not yet part of any loaded order graph, so they are
         // tracked separately in case the order later has to be fully deallocated.
         var createdSubstitutes = new List<Allocation>();
-
-        var deallocatedOrderIds = new HashSet<Guid>();
 
         foreach (var allocation in surrenderOrder)
         {
@@ -104,9 +134,13 @@ public class InventoryCorrectionService : IInventoryCorrectionService
 
             int stillMissing = await TryCoverWithSubstitutesAsync(sku, allocation, reduction, createdSubstitutes);
 
+            impact.CoveredBySubstitutes += reduction - stillMissing;
+
             if (stillMissing > 0)
-                await HandleUncoveredShortfallAsync(allocation, createdSubstitutes, deallocatedOrderIds);
+                await HandleUncoveredShortfallAsync(allocation, createdSubstitutes, impact);
         }
+
+        return impact;
     }
 
     /// <summary>
@@ -159,7 +193,7 @@ public class InventoryCorrectionService : IInventoryCorrectionService
     private async Task HandleUncoveredShortfallAsync(
         Allocation allocation,
         List<Allocation> createdSubstitutes,
-        HashSet<Guid> deallocatedOrderIds)
+        ShortfallImpact impact)
     {
         var order = allocation.OrderLine.Order;
 
@@ -171,13 +205,17 @@ public class InventoryCorrectionService : IInventoryCorrectionService
                 order.Status = OrderStatus.PartiallyAllocated;
 
                 await _orderRepository.UpdateAsync(order);
+
+                impact.DowngradedOrderIds.Add(order.Id);
             }
 
             return;
         }
 
-        if (!deallocatedOrderIds.Add(order.Id))
+        if (impact.DeallocatedOrderIds.Contains(order.Id))
             return;
+
+        impact.DeallocatedOrderIds.Add(order.Id);
 
         // The allocation graph reached from this SKU only carries the lines that happen to be
         // tied to it, so the order is reloaded in full: allocations this order holds on other
