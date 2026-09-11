@@ -39,4 +39,30 @@ public class OrderRepository : BaseRepository<Order>, IOrderRepository
                 .ThenInclude(x => x.Allocations)
             .FirstOrDefaultAsync(x => x.OrderLines.Any(l => l.Id == orderLineId));
     }
+
+    public async Task<List<Order>> GetAllAsync()
+    {
+        return await _dbContext.Orders
+            .AsNoTracking()
+            .Include(x => x.OrderLines)
+                .ThenInclude(x => x.Product)
+            .Include(x => x.OrderLines)
+                .ThenInclude(x => x.Allocations)
+            .OrderByDescending(x => x.Priority)
+            .ThenBy(x => x.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<Order?> GetDetailAsync(Guid orderId)
+    {
+        return await _dbContext.Orders
+            .AsNoTracking()
+            .Include(x => x.OrderLines)
+                .ThenInclude(x => x.Product)
+            .Include(x => x.OrderLines)
+                .ThenInclude(x => x.Allocations)
+                    .ThenInclude(x => x.Sku)
+                        .ThenInclude(x => x.WarehouseLocation)
+            .FirstOrDefaultAsync(x => x.Id == orderId);
+    }
 }

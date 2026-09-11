@@ -1,282 +1,176 @@
 @page "/orders"
+@rendermode InteractiveServer
+@using WHMAllocation.App.Display
+@inject IOrderRepository OrderRepository
+@inject IAllocationService AllocationService
+@inject NavigationManager Navigation
 
 <PageTitle>Orders</PageTitle>
 
 <div class="container-fluid px-3 px-lg-4 py-4">
   <div class="page-heading">
     <div class="page-heading-copy">
-      <span class="page-icon"><i class="bi bi-speedometer2" aria-hidden="true"></i></span>
+      <span class="page-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
       <div>
-        <p class="eyebrow mb-1">Overview</p>
+        <p class="eyebrow mb-1">Scenario 1</p>
         <h1 class="h3 mb-1">Orders</h1>
-        <p class="text-muted mb-0">Manage customer orders, inventory allocation, SKU availability,
-          and warehouse operations from one centralized workspace.</p>
-        </div>
+        <p class="text-muted mb-0">
+          Released orders are allocated highest priority first, and oldest first within a priority.
+        </p>
       </div>
-    
+    </div>
+    <div class="ms-auto">
+      <button class="btn btn-primary" type="button" @onclick="RunAllocationAsync" disabled="@_isRunning">
+        @if (_isRunning)
+        {
+          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+          <span>Allocating…</span>
+        }
+        else
+        {
+          <i class="bi bi-lightning-charge" aria-hidden="true"></i>
+          <span> Run Allocation</span>
+        }
+      </button>
+    </div>
+  </div>
+
+  @if (_runResult is not null)
+  {
+    <div class="alert @Badges.ForRun(_runResult) mt-3" role="alert">
+      <div class="fw-semibold mb-1">
+        Allocation run finished — @_runResult.OrdersProcessed order(s) processed,
+        @_runResult.TotalQuantityAllocated unit(s) allocated.
+      </div>
+      <div class="small">
+        @_runResult.FullyAllocatedCount fully allocated ·
+        @_runResult.PartiallyAllocatedCount partially allocated ·
+        @_runResult.SkippedCount skipped
       </div>
 
-      <section class="row g-3 mt-1" aria-label="Dashboard metrics">
-        <div class="col-12 col-sm-6 col-xl-3">
-          <article class="metric-card metric-primary">
-            <div class="metric-top">
-              <span class="metric-label">Released Orders</span>
-              <span class="metric-icon"><i class="fs-3 bi bi-box-seam-fill text-info"></i></span>
-            </div>
-            <div class="metric-value">23</div>
-            <div class="metric-meta">
-              <span class="text-primary">ERP'den geldi</span>
-              <span>Henüz allocate edilmedi</span>
-            </div>
-          </article>
-        </div>
+      @if (_runResult.Orders.Any(x => x.IsSkipped))
+      {
+        <hr />
+        <div class="small mb-1 fw-semibold">Skipped</div>
+        <ul class="small mb-0 ps-3">
+          @foreach (var skipped in _runResult.Orders.Where(x => x.IsSkipped))
+          {
+            <li>@skipped.OrderNumber — @Badges.Describe(skipped.Outcome)</li>
+          }
+        </ul>
+      }
+    </div>
+  }
 
-        <div class="col-12 col-sm-6 col-xl-3">
-          <article class="metric-card metric-success">
-            <div class="metric-top">
-              <span class="metric-label">Allocated Orders</span>
-              <span class="metric-icon"><i class="fs-3 bi bi-bag-check" aria-hidden="true"></i></span>
-            </div>
-            <div class="metric-value">16</div>
-            <div class="metric-meta">
-              <span class="text-success">Stok tahsisi tamamlandı</span>
-              <span>Gönderime hazır</span>
-            </div>
-          </article>
-        </div>
+  <section class="panel mt-3">
+    <div class="panel-header">
+      <div>
+        <h2 class="h5 mb-1 section-title">
+          <i class="bi bi-list-ul" aria-hidden="true"></i><span>All Orders</span>
+        </h2>
+        <p class="text-muted mb-0">@_orders.Count order(s) in the warehouse.</p>
+      </div>
+      <input class="form-control search-input table-search" type="search"
+             placeholder="Filter orders" aria-label="Filter orders" data-table-search="ordersTable" />
+    </div>
 
-        <div class="col-12 col-sm-6 col-xl-3">
-          <article class="metric-card metric-danger">
-            <div class="metric-top">
-              <span class="metric-label">Stock Issues</span>
-              <span class="metric-icon"><i class="fs-3 bi-exclamation-triangle-fill text-danger"></i></span>
-            </div>
-            <div class="metric-value">5</div>
-            <div class="metric-meta">
-              <span class="text-danger">CompleteDeliveryRequired</span>
-              <span>ama stok yetersiz</span>
-            </div>
-          </article>
-        </div>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0" id="ordersTable">
+        <thead>
+          <tr>
+            <th scope="col">Order</th>
+            <th scope="col">Priority</th>
+            <th scope="col">Complete Delivery</th>
+            <th scope="col">Status</th>
+            <th scope="col">Allocated</th>
+            <th scope="col">Created</th>
+            <th scope="col" class="text-end">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          @foreach (var order in _orders)
+          {
+            var requested = order.OrderLines.Where(x => !x.IsCancelled).Sum(x => x.RequestedQuantity);
+            var allocated = order.OrderLines.SelectMany(x => x.Allocations).Where(x => x.IsActive).Sum(x => x.Quantity);
 
-        <div class="col-12 col-sm-6 col-xl-3">
-          <article class="metric-card metric-warning">
-            <div class="metric-top">
-              <span class="metric-label">Locked Locations</span>
-              <span class="metric-icon"><i class="fs-3 bi bi-building-lock text-warning"></i></span>
-            </div>
-            <div class="metric-value">36</div>
-            <div class="metric-meta">
-              <span class="text-secondary">Kullanılamayan raf sayısı</span>
-              <span></span>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section class="row g-3 mt-1">
-        <div class="col-12 col-xl-8">
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <h2 class="h5 mb-1 section-title"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i><span>Order Status
-                  Overview</span></h2>
-                  <p class="text-muted mb-0">Orders Created Over Time</p>
-                </div>
-                <a class="btn btn-light btn-sm" href="charts.html">View Details</a>
-              </div>
-
-              <div class="chart-bars" aria-label="Order Status Overview chart">
-                <div class="chart-column bar-42"><span></span><small>Jan</small></div>
-                <div class="chart-column bar-58"><span></span><small>Feb</small></div>
-                <div class="chart-column bar-51"><span></span><small>Mar</small></div>
-                <div class="chart-column bar-72"><span></span><small>Apr</small></div>
-                <div class="chart-column bar-66"><span></span><small>May</small></div>
-                <div class="chart-column bar-83"><span></span><small>Jun</small></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-12 col-xl-4">
-            <div class="panel h-100">
-              <div class="panel-header">
+            <tr>
+              <td>
                 <div>
-                  <h2 class="h5 mb-1 section-title"><i class="bi bi-pie-chart" aria-hidden="true"></i>
-                    <span>Order Priorty</span>
-                  </h2>
-                  <p class="text-muted mb-0">Revenue contribution by source.</p>
+                  <p class="fw-semibold mb-0">@order.OrderNumber</p>
+                  <p class="text-muted small mb-0">@LineSummary(order)</p>
                 </div>
-              </div>
-              <div class="donut-chart mx-auto"><span>68%</span></div>
-              <div class="legend-list mt-3
-                ">
-                <div><span class="legend-dot bg-primary"></span>Low<strong>42%</strong></div>
-                <div><span class="legend-dot bg-success"></span>Normal<strong>26%</strong></div>
-                <div><span class="legend-dot bg-danger"></span>High<strong>14%</strong></div>
-              </div>
-            </div>
-          </div>
-        </section>
+              </td>
+              <td><span class="badge @Badges.ForPriority(order.Priority)">@order.Priority</span></td>
+              <td>
+                @if (order.CompleteDeliveryRequired)
+                {
+                  <span class="fw-semibold text-success"><i class="bi bi-check-circle" aria-hidden="true"></i> Yes</span>
+                }
+                else
+                {
+                  <span class="text-muted"><i class="bi bi-dash-circle" aria-hidden="true"></i> No</span>
+                }
+              </td>
+              <td>
+                <span class="badge @Badges.ForStatus(order.Status)">@Badges.StatusText(order.Status)</span>
+              </td>
+              <td>
+                <span class="fw-semibold">@allocated</span>
+                <span class="text-muted small"> / @requested</span>
+              </td>
+              <td class="text-muted small">@order.CreatedAt.ToString("dd MMM yyyy")</td>
+              <td class="text-end">
+                <a class="btn btn-secondary btn-sm" href="@($"/orders/{order.Id}")">
+                  <i class="bi bi-eye" aria-hidden="true"></i> View
+                </a>
+              </td>
+            </tr>
+          }
 
-        <section class="panel mt-3">
-          <div class="panel-header">
-            <div>
-              <h2 class="h5 mb-1 section-title"><i class="bi bi-people" aria-hidden="true"></i><span>Recent Orders</span></h2>
-              <p class="text-muted mb-0">Recent customer orders and their allocation status within the warehouse management
-                system..</p>
-              </div>
-              <a class="btn btn-outline-secondary btn-sm" href="users.html">Manage Users</a>
-            </div>
-            <div class="table-responsive">
-              <table class="table align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th scope="col">Order</th>
-                    <th scope="col">Priority</th>
-                    <th scope="col">Complete Delivery</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Created</th>
-                    <th scope="col" class="text-end">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
+          @if (_orders.Count == 0)
+          {
+            <tr>
+              <td colspan="7" class="text-center text-muted py-4">No orders found.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
 
-                  <tr>
-                    <td>
-                      <div>
-                        <p class="fw-semibold mb-0">ORD-1001</p>
-                        <p class="text-muted small mb-0">
-                          Apple Juice (25), Orange Juice (10)
-                        </p>
-                      </div>
-                    </td>
-                    <td>
-                      <span class="badge text-bg-danger">High</span>
-                    </td>
-                    <td>
-                     <p class="fw-semibold mb-0">Yes  <i class="fs-2 bi bi-bag-x text-success"></i></p>        
-                     </td>
-                    <td>
-                      <span class="badge text-bg-success">
-                        Allocated
-                      </span>
-                    </td>
-                    <td>Sep 10, 2026</td>
-                    <td class="text-end">
-                      <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
-                    </td>
-                  </tr>
+@code {
+    private List<Order> _orders = [];
+    private AllocationRunResult? _runResult;
+    private bool _isRunning;
 
-                  <tr>
-                    <td>
-                      <div>
-                        <p class="fw-semibold mb-0">ORD-1002</p>
-                        <p class="text-muted small mb-0">
-                          Cola (15)
-                        </p>
-                      </div>
-                    </td>
-                    <td>
-                      <span class="badge text-bg-warning">Normal</span>
-                    </td>
-                    <td>
-                     <p class="fw-semibold mb-0">No  <i class="fs-2 bi bi-bag-x text-danger"></i></p>
-                      </td>
-                    <td>
-                      <span class="badge text-bg-info">
-                        Released
-                      </span>
-                    </td>
-                    <td>Sep 10, 2026</td>
-                    <td class="text-end">
-                       <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
-                    </td>
-                  </tr>
+    protected override async Task OnInitializedAsync() => await LoadAsync();
 
-                  <tr>
-                    <td>
-                      <div>
-                        <p class="fw-semibold mb-0">ORD-1003</p>
-                        <p class="text-muted small mb-0">
-                          Orange Juice (50)
-                        </p>
-                      </div>
-                    </td>
-                    <td>
-                      <span class="badge text-bg-danger">High</span>
-                    </td>
-                    <td><p class="fw-semibold mb-0">No  <i class="fs-2 bi bi-bag-x text-danger"></i></p>       </td>
-                    <td>
-                      <span class="badge text-bg-secondary">
-                        Partially Allocated
-                      </span>
-                    </td>
-                    <td>Sep 09, 2026</td>
-                    <td class="text-end">
-                       <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
-                    </td>
-                  </tr>
+    private async Task LoadAsync() => _orders = await OrderRepository.GetAllAsync();
 
-                  <tr>
-                    <td>
-                      <div>
-                        <p class="fw-semibold mb-0">ORD-1004</p>
-                        <p class="text-muted small mb-0">
-                          Apple Juice (100)
-                        </p>
-                      </div>
-                    </td>
-                    <td>
-                      <span class="badge text-bg-warning">Normal</span>
-                    </td>
-                    <td>
-                      <p class="fw-semibold mb-0">Yes  
-                      <i class="fs-2 bi bi-bag-check text-success"></i></p> 
-                      </td>
-                    <td>
-                      <span class="badge text-bg-danger">
-                        Cancelled
-                      </span>
-                    </td>
-                    <td>Sep 08, 2026</td>
-                    <td class="text-end">
-                     <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
-                    </td>
-                  </tr>
+    private async Task RunAllocationAsync()
+    {
+        _isRunning = true;
 
-                  <tr>
-                    <td>
-                      <div>
-                        <p class="fw-semibold mb-0">ORD-1005</p>
-                        <p class="text-muted small mb-0">
-                          Cola (20), Water (30)
-                        </p>
-                      </div>
-                    </td>
-                    <td>
-                      <span class="badge text-bg-secondary">Low</span>
-                    </td>
-                    <td>
-                       <p class="fw-semibold mb-0">Yes  
-                      <i class="fs-2 bi bi-bag-check text-success"></i></p> 
-                    </td>
-                    <td>
-                      <span class="badge text-bg-success">
-                        Allocated
-                      </span>
-                    </td>
-                    <td>
-                    Sep 08, 2026
-                    </td>
-                    <td class="text-end">
-                      <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-eye" aria-hidden="true"></i> View</button>
-                    </td>
-                  </tr>
+        try
+        {
+            _runResult = await AllocationService.AllocateReleasedOrdersAsync();
 
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
+            await LoadAsync();
+        }
+        finally
+        {
+            _isRunning = false;
+        }
+    }
 
- 
+    private static string LineSummary(Order order)
+    {
+        var lines = order.OrderLines
+            .Where(x => !x.IsCancelled)
+            .Select(x => $"{x.Product?.Name ?? "Unknown"} ({x.RequestedQuantity})")
+            .ToList();
+
+        return lines.Count == 0 ? "No live lines" : string.Join(", ", lines);
+    }
+}
